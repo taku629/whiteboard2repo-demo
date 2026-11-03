@@ -6,60 +6,72 @@
       "label": "Web App",
       "kind": "client",
       "bbox": [
-        242,
-        382,
-        362,
-        562
+        245,
+        395,
+        365,
+        555
       ],
-      "responsibility": "Frontend client for initiating room bookings"
+      "responsibility": "Frontend client initiating booking requests"
     },
     {
       "id": "booking_api",
       "label": "Booking API",
       "kind": "service",
       "bbox": [
-        412,
+        415,
         335,
-        555,
-        515
+        545,
+        495
       ],
-      "responsibility": "Handles booking requests and persists bookings"
+      "responsibility": "Core booking orchestration and validation"
     },
     {
-      "id": "rooms_db",
-      "label": "Rooms DB",
-      "kind": "database",
+      "id": "payments_api",
+      "label": "Payments API",
+      "kind": "external",
       "bbox": [
-        445,
-        578,
-        547,
-        788
+        420,
+        165,
+        545,
+        275
       ],
-      "responsibility": "Stores room inventory and booking records"
+      "responsibility": "External payment processing via REST"
     },
     {
       "id": "notifier",
       "label": "Notifier",
       "kind": "worker",
       "bbox": [
-        622,
-        332,
-        742,
-        468
+        625,
+        325,
+        740,
+        435
       ],
-      "responsibility": "Consumes booking events and sends notifications"
+      "responsibility": "Handles booking.created events and sends notifications"
     },
     {
       "id": "email",
       "label": "Email",
       "kind": "external",
       "bbox": [
-        772,
-        312,
-        866,
-        422
+        765,
+        305,
+        845,
+        395
       ],
-      "responsibility": "External email delivery provider"
+      "responsibility": "External email delivery service"
+    },
+    {
+      "id": "rooms_db",
+      "label": "Rooms DB",
+      "kind": "database",
+      "bbox": [
+        465,
+        575,
+        565,
+        745
+      ],
+      "responsibility": "Persistent storage for rooms and bookings"
     }
   ],
   "edges": [
@@ -71,9 +83,9 @@
     },
     {
       "from": "booking_api",
-      "to": "rooms_db",
-      "label": "SQL",
-      "protocol": "sql"
+      "to": "payments_api",
+      "label": "charge / REST",
+      "protocol": "http"
     },
     {
       "from": "booking_api",
@@ -86,17 +98,33 @@
       "to": "email",
       "label": "",
       "protocol": "smtp"
+    },
+    {
+      "from": "booking_api",
+      "to": "rooms_db",
+      "label": "SQL",
+      "protocol": "sql"
     }
   ],
   "notes": [
     {
-      "text": "no double booking!",
-      "invariant": "The system must reject any booking that overlaps in time with an existing confirmed booking for the same room.",
+      "text": "max 3 active bookings per user!",
+      "invariant": "The system must reject a new booking if the user already has 3 active bookings",
       "bbox": [
-        624,
-        682,
-        872,
-        812
+        205,
+        785,
+        575,
+        965
+      ]
+    },
+    {
+      "text": "no double booking!",
+      "invariant": "The system must prevent overlapping bookings for the same room - a room cannot be booked twice for the same time slot",
+      "bbox": [
+        635,
+        665,
+        875,
+        795
       ]
     }
   ],

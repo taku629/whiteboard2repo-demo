@@ -9,6 +9,8 @@ from common.bus import bus
 from services.booking_api.app import app as booking_app
 from services.notifier.app import app as notifier_app
 from services.notifier.app import sent_emails, received_events
+from services.payments_api.app import app as payments_app
+from services.payments_api.app import charges
 
 @pytest.fixture(autouse=True)
 def isolate():
@@ -16,6 +18,10 @@ def isolate():
     bus.log.clear()
     sent_emails.clear()
     received_events.clear()
+    charges.clear()
+    # reset counter
+    from services.payments_api import app as papp
+    papp._charge_counter = 0
     yield
     # cleanup after
     bus.log.clear()
@@ -180,3 +186,60 @@ def test_edge_notifier_to_email_smtp():
     r = nclient.get("/sent-emails")
     assert r.status_code == 200
     assert len(r.json()) == 2
+
+def test_edge_booking_api_to_payments_api_http():
+    """Edge: booking_api -> payments_api via http 'charge / REST' - booking triggers payment charge via REST."""
+    client = TestClient(booking_app)
+    # Create room
+    r = client.post("/rooms", json={"name": "Payment Room", "capacity": 2})
+    assert r.status_code == 201
+    room_id = r.json()["id"]
+
+    # Ensure no charges yet
+    assert len(charges) == 0
+
+    # Create booking with explicit amount - should trigger payment charge
+    r = client.post("/bookings", json={
+        "room_id": room_id,
+        "guest_name": "Eve",
+        "guest_email": "eve@example.com",
+        "start_time": "2026-10-01T14:00:00",
+        "end_time": "2026-10-02T11:00:00",
+        "amount": 150.0,
+        "currency": "USD"
+    })
+    assert r.status_code == 201, r.text
+
+    # Verify payment was charged via REST (in-memory fake)
+    assert len(charges) == 1
+    assert charges[0]["customer_email"] == "eve@example.com"
+    assert charges[0]["amount"] == 150.0
+    assert charges[0]["status"] == "succeeded"
+
+    # Also verify via payments_api HTTP endpoint directly
+    pclient = TestClient(payments_app)
+    r = pclient.get("/charges")
+    assert r.status_code == 200
+    assert len(r.json()) == 1
+    assert r.json()[0]["customer_email"] == "eve@example.com"
+
+    # Verify booking still retrievable
+    booking_id = client.get("/bookings").json()[0]["id"]
+    r = client.get(f"/bookings/{booking_id}")
+    assert r.status_code == 200
+
+    # Test payment decline handling - booking should be rejected with 402
+    r = client.post("/bookings", json={
+        "room_id": room_id,
+        "guest_name": "Fail",
+        "guest_email": "decline@example.com",
+        "start_time": "2026-10-05T14:00:00",
+        "end_time": "2026-10-06T11:00:00",
+        "amount": 100.0
+    })
+    assert r.status_code == 402
+    assert "payment" in r.json()["detail"].lower() or "declined" in r.json()["detail"].lower()
+    # No additional charge for declined payment
+    assert len(charges) == 1
+    # No booking created for declined payment
+    assert len(client.get("/bookings").json()) == 1

@@ -3,6 +3,7 @@
 Implements board edges:
   -> rooms_db via sql 'SQL' (tables: rooms, bookings)
   -> notifier via event 'booking.created'
+  -> payments_api via http 'charge / REST' (charges via external Payments API)
   <- web_app via http '' (exposes REST API for frontend)
 
 Responsibility: Handles booking requests and persists bookings
@@ -50,6 +51,8 @@ class BookingCreate(BaseModel):
     guest_email: str
     start_time: datetime
     end_time: datetime
+    amount: Optional[float] = None
+    currency: Optional[str] = "USD"
 
     @field_validator('end_time')
     @classmethod
@@ -81,6 +84,13 @@ def check_overlap(db: Session, room_id: int, start: datetime, end: datetime, exc
     if exclude_id:
         q = q.filter(Booking.id != exclude_id)
     return db.query(q.exists()).scalar()
+
+def count_active_bookings(db: Session, guest_email: str) -> int:
+    """Count active (confirmed) bookings for a user."""
+    return db.query(Booking).filter(
+        Booking.guest_email == guest_email,
+        Booking.status == "confirmed",
+    ).count()
 
 # --- Endpoints ---
 
@@ -120,6 +130,32 @@ def create_booking(payload: BookingCreate, db: Session = Depends(get_db)):
     # Invariant: no double booking - reject overlapping confirmed bookings for same room
     if check_overlap(db, payload.room_id, payload.start_time, payload.end_time):
         raise HTTPException(status_code=409, detail="Room already booked for this time range (no double booking)")
+
+    # Invariant: max 3 active bookings per user
+    active_count = count_active_bookings(db, payload.guest_email)
+    if active_count >= 3:
+        raise HTTPException(status_code=409, detail="User already has 3 active bookings (max 3 active bookings per user)")
+
+    # Edge: booking_api -> payments_api via http 'charge / REST'
+    # Charge via external Payments API before persisting booking
+    try:
+        from services.payments_api.client import charge as payment_charge
+        amount = payload.amount if payload.amount is not None else 100.0
+        currency = payload.currency if payload.currency else "USD"
+        payment_charge(
+            amount=amount,
+            customer_email=payload.guest_email,
+            currency=currency,
+            description=f"Booking for room {payload.room_id} by {payload.guest_name}",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Payment failure should reject booking
+        msg = str(e)
+        if "402" in msg or "declined" in msg.lower():
+            raise HTTPException(status_code=402, detail=f"Payment failed: {msg}")
+        raise HTTPException(status_code=402, detail=f"Payment failed: {msg}")
 
     booking = Booking(
         room_id=payload.room_id,

@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+sqlalchemy>=2
+httpx
+pytest
+psycopg[binary]
+redis

@@ -1,0 +1,110 @@
+{
+  "title": "Room Booking System",
+  "components": [
+    {
+      "id": "web_app",
+      "label": "Web App",
+      "kind": "client",
+      "bbox": [
+        242,
+        382,
+        362,
+        562
+      ],
+      "responsibility": "Frontend client for initiating room bookings"
+    },
+    {
+      "id": "booking_api",
+      "label": "Booking API",
+      "kind": "service",
+      "bbox": [
+        412,
+        335,
+        555,
+        515
+      ],
+      "responsibility": "Handles booking requests and persists bookings"
+    },
+    {
+      "id": "rooms_db",
+      "label": "Rooms DB",
+      "kind": "database",
+      "bbox": [
+        445,
+        578,
+        547,
+        788
+      ],
+      "responsibility": "Stores room inventory and booking records"
+    },
+    {
+      "id": "notifier",
+      "label": "Notifier",
+      "kind": "worker",
+      "bbox": [
+        622,
+        332,
+        742,
+        468
+      ],
+      "responsibility": "Consumes booking events and sends notifications"
+    },
+    {
+      "id": "email",
+      "label": "Email",
+      "kind": "external",
+      "bbox": [
+        772,
+        312,
+        866,
+        422
+      ],
+      "responsibility": "External email delivery provider"
+    }
+  ],
+  "edges": [
+    {
+      "from": "web_app",
+      "to": "booking_api",
+      "label": "",
+      "protocol": "http"
+    },
+    {
+      "from": "booking_api",
+      "to": "rooms_db",
+      "label": "SQL",
+      "protocol": "sql"
+    },
+    {
+      "from": "booking_api",
+      "to": "notifier",
+      "label": "booking.created",
+      "protocol": "event"
+    },
+    {
+      "from": "notifier",
+      "to": "email",
+      "label": "",
+      "protocol": "smtp"
+    }
+  ],
+  "notes": [
+    {
+      "text": "no double booking!",
+      "invariant": "The system must reject any booking that overlaps in time with an existing confirmed booking for the same room.",
+      "bbox": [
+        624,
+        682,
+        872,
+        812
+      ]
+    }
+  ],
+  "questions": [],
+  "image_size": [
+    1408,
+    768
+  ],
+  "model": "meta-models/muse-spark-open",
+  "sam_grounded": false
+}

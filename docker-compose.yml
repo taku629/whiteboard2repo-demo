@@ -1,0 +1,19 @@
+services:
+  booking_api:
+    build: .
+    command: uvicorn services.booking_api.app:app --host 0.0.0.0 --port 8000
+    ports: ["8001:8000"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://app:app@db:5432/app
+    depends_on: [db]
+  notifier:
+    build: .
+    command: uvicorn services.notifier.app:app --host 0.0.0.0 --port 8000
+    ports: ["8002:8000"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://app:app@db:5432/app
+    depends_on: [db]
+  db:
+    image: postgres:16-alpine
+    environment: {POSTGRES_USER: app, POSTGRES_PASSWORD: app, POSTGRES_DB: app}
+    ports: ["5432:5432"]
